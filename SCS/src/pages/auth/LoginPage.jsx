@@ -94,7 +94,7 @@ export function LoginPage() {
         <form className="space-y-4" onSubmit={handleSubmit(onSubmit)}>
           <div className="space-y-2">
             <Label className="text-slate-800" htmlFor="identifier">
-              Email or Student Number
+              Email
             </Label>
             <div className="relative">
               <IdCard className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
@@ -102,7 +102,7 @@ export function LoginPage() {
                 id="identifier"
                 autoComplete="username"
                 className="min-h-11 rounded-2xl border-slate-200 bg-slate-50/80 pl-11 shadow-none focus-visible:bg-white"
-                placeholder="name@college.edu or 142020"
+                placeholder="name@college.edu"
                 {...register('identifier')}
               />
             </div>

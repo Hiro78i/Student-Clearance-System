@@ -26,7 +26,7 @@ export function AuthLayout() {
         style={{ backgroundImage: `url(${mainBg})` }}
       />
       <div className="absolute inset-0 bg-slate-950/45 backdrop-blur-[1px]" />
-      <div className="relative grid h-[min(640px,84vh)] w-[min(1100px,92vw)] overflow-hidden rounded-[2rem] border border-white/70 bg-white shadow-[0_30px_90px_rgba(15,23,42,0.18)] lg:grid-cols-[0.92fr_1.08fr]">
+      <div className="relative grid h-[min(720px,92vh)] w-full max-w-[1100px] overflow-hidden rounded-[2rem] border border-white/70 bg-white shadow-[0_30px_90px_rgba(15,23,42,0.18)] lg:grid-cols-[0.92fr_1.08fr]">
         <section className="relative hidden overflow-hidden bg-slate-950 p-7 text-white lg:flex lg:flex-col lg:justify-between xl:p-8">
           <div
             className="absolute inset-0 bg-cover bg-center"
