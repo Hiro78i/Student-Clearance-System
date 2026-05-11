@@ -10,7 +10,7 @@ A role-based web system for managing student clearance requests and office appro
 
 ## Accessing the System
 
-1. Open the app URL (local dev or deployed URL).
+1. Open the app URL
 2. Sign in from `/login` using your assigned account.
 3. You are automatically redirected to your role dashboard:
 - Student: `/student/dashboard`
