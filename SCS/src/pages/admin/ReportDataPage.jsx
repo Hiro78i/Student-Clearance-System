@@ -22,9 +22,10 @@ import {
   exportOfficeSummary,
   exportReportRows,
   filterReportRows,
+  getCurrentSchoolWeekRange,
   getOfficeAnalytics,
+  getReportPresetRange,
   initialReportFilters,
-  toDateInputValue,
 } from '@/features/clearance/reporting'
 import { useClearance } from '@/hooks/useClearance'
 import { formatDate, formatShortDate } from '@/lib/utils'
@@ -193,11 +194,11 @@ export function ReportDataPage() {
               active={activePreset === 'school-week'}
               label="This school week"
               onClick={() => {
+                setPage(1)
                 setActivePreset('school-week')
                 setDraftFilters((current) => ({
                   ...current,
-                  endDate: '2026-04-23',
-                  startDate: '2026-04-20',
+                  ...getCurrentSchoolWeekRange(),
                 }))
               }}
             />
@@ -246,8 +247,12 @@ export function ReportDataPage() {
                 {paginatedRows.map((row) => (
                   <TableRow className="hover:bg-blue-50/40" key={row.id}>
                     <TableCell className="min-w-44">
-                      <p className="font-bold text-slate-950">{row.id}</p>
-                      <p className="mt-1 text-xs text-slate-500">{row.clearance_type}</p>
+                      <p className="font-bold text-slate-950">
+                        {row.clearance_type || 'Clearance Request'}
+                      </p>
+                      <p className="mt-1 text-xs text-slate-500">
+                        {row.student?.full_name || 'Student unavailable'}
+                      </p>
                     </TableCell>
                     <TableCell className="min-w-56">
                       <p className="font-semibold text-slate-900">
@@ -348,15 +353,11 @@ export function ReportDataPage() {
   )
 
   function applyPreset(daysBack, preset) {
-    const end = new Date('2026-04-23T00:00:00')
-    const start = new Date(end)
-
-    start.setDate(end.getDate() - daysBack)
+    setPage(1)
     setActivePreset(preset)
     setDraftFilters((current) => ({
       ...current,
-      endDate: toDateInputValue(end),
-      startDate: toDateInputValue(start),
+      ...getReportPresetRange(daysBack),
     }))
   }
 

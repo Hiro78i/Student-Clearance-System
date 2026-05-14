@@ -34,6 +34,7 @@ export function buildReportRows({ filters, getProfile, requests, steps }) {
       approvedSteps: approvedSteps.length,
       pendingSteps: pendingSteps.length,
       rejectedSteps: rejectedSteps.length,
+      selectedOfficeId: filters.officeId === ALL_FILTERS ? null : filters.officeId,
       selectedOfficeStatus: selectedOfficeStep?.status || 'Not routed',
       student,
       totalSteps: requestSteps.length,
@@ -85,10 +86,19 @@ export function getKpis(rows) {
 
 export function getOfficeAnalytics(rows, steps, getOffice) {
   const rowIds = new Set(rows.map((row) => row.id))
+  const selectedOfficeIds = new Set(
+    rows
+      .filter((row) => row.selectedOfficeId)
+      .map((row) => row.selectedOfficeId),
+  )
 
   return Object.values(
     steps
-      .filter((step) => rowIds.has(step.request_id))
+      .filter(
+        (step) =>
+          rowIds.has(step.request_id) &&
+          (!selectedOfficeIds.size || selectedOfficeIds.has(step.office_id)),
+      )
       .reduce((summary, step) => {
         const office = getOffice(step.office_id)
         const key = office?.office_name || 'Unknown Office'
@@ -115,9 +125,47 @@ export function getOfficeAnalytics(rows, steps, getOffice) {
   ).sort((a, b) => b.total - a.total)
 }
 
+export function getRequestTrend(rows) {
+  const formatter = new Intl.DateTimeFormat('en-US', { month: 'short' })
+  const grouped = rows.reduce((summary, row) => {
+    const date = new Date(row.submitted_at || row.request_date || row.created_at)
+
+    if (Number.isNaN(date.getTime())) return summary
+
+    const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
+    summary[key] ||= {
+      approved: 0,
+      date,
+      month: formatter.format(date),
+      rejected: 0,
+      submitted: 0,
+    }
+    summary[key].submitted += 1
+
+    if ([REQUEST_STATUS.APPROVED, REQUEST_STATUS.COMPLETED].includes(row.status)) {
+      summary[key].approved += 1
+    }
+
+    if (row.status === REQUEST_STATUS.REJECTED || row.rejectedSteps > 0) {
+      summary[key].rejected += 1
+    }
+
+    return summary
+  }, {})
+
+  return Object.values(grouped)
+    .sort((a, b) => a.date - b.date)
+    .map((item) => ({
+      approved: item.approved,
+      month: item.month,
+      rejected: item.rejected,
+      submitted: item.submitted,
+    }))
+}
+
 export function exportReportRows(rows) {
   const headers = [
-    'Request',
+    'Request Type',
     'Student',
     'Course',
     'Status',
@@ -128,7 +176,7 @@ export function exportReportRows(rows) {
     'Total Steps',
   ]
   const csvRows = rows.map((row) => [
-    row.id,
+    row.clearance_type || 'Clearance Request',
     row.student?.full_name || '',
     row.student?.course || '',
     row.status,
@@ -157,6 +205,32 @@ export function exportOfficeSummary(rows) {
 
 export function toDateInputValue(date) {
   return date.toISOString().slice(0, 10)
+}
+
+export function getReportPresetRange(daysBack) {
+  const end = new Date()
+  const start = new Date(end)
+
+  start.setDate(end.getDate() - daysBack)
+
+  return {
+    endDate: toDateInputValue(end),
+    startDate: toDateInputValue(start),
+  }
+}
+
+export function getCurrentSchoolWeekRange() {
+  const end = new Date()
+  const start = new Date(end)
+  const day = start.getDay()
+  const daysSinceMonday = day === 0 ? 6 : day - 1
+
+  start.setDate(start.getDate() - daysSinceMonday)
+
+  return {
+    endDate: toDateInputValue(end),
+    startDate: toDateInputValue(start),
+  }
 }
 
 function downloadCsv(name, rows) {

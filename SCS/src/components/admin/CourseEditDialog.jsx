@@ -35,42 +35,46 @@ export function CourseEditDialog({ course, open, onOpenChange }) {
   async function handleSubmit(event) {
     event.preventDefault()
     setSaving(true)
-    const formData = new FormData(event.currentTarget)
-    const category = formData.get('category')
-    const majors = String(formData.get('majors') || '')
-      .split('\n')
-      .map((value) => value.trim())
-      .filter(Boolean)
 
-    const payload = {
-      title: String(formData.get('title') || '').trim(),
-      abbreviation: String(formData.get('abbreviation') || '').trim(),
-      category,
-      durationLabel: durationByCategory[category],
-      department: String(formData.get('department') || '').trim(),
-      majors,
-    }
+    try {
+      const formData = new FormData(event.currentTarget)
+      const category = formData.get('category')
+      const majors = String(formData.get('majors') || '')
+        .split('\n')
+        .map((value) => value.trim())
+        .filter(Boolean)
 
-    if (isEditing) {
-      const result = await updateCourseDetails({ courseId: course.id, ...payload })
-      if (result?.error) {
-        toast(result.error, 'error')
-        setSaving(false)
-        return
+      const payload = {
+        title: String(formData.get('title') || '').trim(),
+        abbreviation: String(formData.get('abbreviation') || '').trim(),
+        category,
+        durationLabel: durationByCategory[category],
+        department: String(formData.get('department') || '').trim(),
+        majors,
       }
-      toast('Course updated')
-    } else {
-      const result = await addCourse(payload)
-      if (result?.error) {
-        toast(result.error, 'error')
-        setSaving(false)
-        return
-      }
-      toast('Course added')
-    }
 
-    setSaving(false)
-    onOpenChange(false)
+      if (isEditing) {
+        const result = await updateCourseDetails({ courseId: course.id, ...payload })
+        if (result?.error) {
+          toast(result.error, 'error')
+          return
+        }
+        toast('Course updated')
+      } else {
+        const result = await addCourse(payload)
+        if (result?.error) {
+          toast(result.error, 'error')
+          return
+        }
+        toast('Course added')
+      }
+
+      onOpenChange(false)
+    } catch (error) {
+      toast(error?.message || 'Unable to save course. Please try again.', 'error')
+    } finally {
+      setSaving(false)
+    }
   }
 
   return (

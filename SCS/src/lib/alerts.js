@@ -17,6 +17,8 @@ export function confirmAction({
   text,
   confirmButtonText = 'Confirm',
   icon = 'question',
+  showLoaderOnConfirm = false,
+  preConfirm,
 }) {
   return Swal.fire({
     title,
@@ -28,6 +30,9 @@ export function confirmAction({
     confirmButtonText,
     cancelButtonText: 'Cancel',
     reverseButtons: true,
+    showLoaderOnConfirm,
+    preConfirm,
+    allowOutsideClick: () => !Swal.isLoading(),
   })
 }
 

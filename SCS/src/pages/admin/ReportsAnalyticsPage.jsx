@@ -30,10 +30,12 @@ import {
   ALL_FILTERS,
   buildReportRows,
   filterReportRows,
+  getCurrentSchoolWeekRange,
   getKpis,
   getOfficeAnalytics,
+  getReportPresetRange,
+  getRequestTrend,
   initialReportFilters,
-  toDateInputValue,
 } from '@/features/clearance/reporting'
 import { useClearance } from '@/hooks/useClearance'
 
@@ -41,8 +43,7 @@ export function ReportsAnalyticsPage() {
   const [activePreset, setActivePreset] = useState('')
   const [draftFilters, setDraftFilters] = useState(initialReportFilters)
   const [filters, setFilters] = useState(initialReportFilters)
-  const { getOffice, getProfile, offices, requests, requestTrend, steps } =
-    useClearance()
+  const { getOffice, getProfile, offices, requests, steps } = useClearance()
 
   const reportRows = useMemo(
     () =>
@@ -63,6 +64,7 @@ export function ReportsAnalyticsPage() {
     () => getOfficeAnalytics(filteredRows, steps, getOffice),
     [filteredRows, getOffice, steps],
   )
+  const requestTrend = useMemo(() => getRequestTrend(filteredRows), [filteredRows])
 
   return (
     <div className="space-y-6">
@@ -220,8 +222,7 @@ export function ReportsAnalyticsPage() {
                 setActivePreset('school-week')
                 setDraftFilters((current) => ({
                   ...current,
-                  endDate: '2026-04-23',
-                  startDate: '2026-04-20',
+                  ...getCurrentSchoolWeekRange(),
                 }))
               }}
             />
@@ -234,38 +235,42 @@ export function ReportsAnalyticsPage() {
           <CardHeader>
             <CardTitle>Approved vs rejected requests</CardTitle>
             <p className="text-sm leading-6 text-slate-600">
-              Monthly request movement based on the reporting trend dataset. Use this
-              chart to compare clearance throughput and decision outcomes.
+              Monthly request movement from the currently filtered clearance records.
+              Use this chart to compare throughput and decision outcomes.
             </p>
           </CardHeader>
           <CardContent className="h-96">
-            <ResponsiveContainer height="100%" width="100%">
-              <BarChart data={requestTrend} margin={{ bottom: 8, left: 0, right: 8, top: 8 }}>
-                <CartesianGrid stroke="#e2e8f0" strokeDasharray="3 3" />
-                <XAxis dataKey="month" stroke="#64748b" />
-                <YAxis stroke="#64748b" />
-                <Tooltip content={<ReportTooltip />} cursor={{ fill: '#eff6ff' }} />
-                <Legend wrapperStyle={{ paddingTop: 16 }} />
-                <Bar
-                  dataKey="submitted"
-                  fill="#2563eb"
-                  name="Submitted"
-                  radius={[8, 8, 0, 0]}
-                />
-                <Bar
-                  dataKey="approved"
-                  fill="#059669"
-                  name="Approved"
-                  radius={[8, 8, 0, 0]}
-                />
-                <Bar
-                  dataKey="rejected"
-                  fill="#e11d48"
-                  name="Rejected"
-                  radius={[8, 8, 0, 0]}
-                />
-              </BarChart>
-            </ResponsiveContainer>
+            {requestTrend.length ? (
+              <ResponsiveContainer height="100%" width="100%">
+                <BarChart data={requestTrend} margin={{ bottom: 8, left: 0, right: 8, top: 8 }}>
+                  <CartesianGrid stroke="#e2e8f0" strokeDasharray="3 3" />
+                  <XAxis dataKey="month" stroke="#64748b" />
+                  <YAxis allowDecimals={false} stroke="#64748b" />
+                  <Tooltip content={<ReportTooltip />} cursor={{ fill: '#eff6ff' }} />
+                  <Legend wrapperStyle={{ paddingTop: 16 }} />
+                  <Bar
+                    dataKey="submitted"
+                    fill="#2563eb"
+                    name="Submitted"
+                    radius={[8, 8, 0, 0]}
+                  />
+                  <Bar
+                    dataKey="approved"
+                    fill="#059669"
+                    name="Approved"
+                    radius={[8, 8, 0, 0]}
+                  />
+                  <Bar
+                    dataKey="rejected"
+                    fill="#e11d48"
+                    name="Rejected"
+                    radius={[8, 8, 0, 0]}
+                  />
+                </BarChart>
+              </ResponsiveContainer>
+            ) : (
+              <EmptyReportState message="No real clearance requests match the active filters." />
+            )}
           </CardContent>
         </Card>
 
@@ -277,21 +282,25 @@ export function ReportsAnalyticsPage() {
             </p>
           </CardHeader>
           <CardContent className="space-y-3">
-            {officeAnalytics.slice(0, 6).map((item) => (
-              <div
-                className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3"
-                key={item.office}
-              >
-                <div className="flex items-center justify-between gap-3">
-                  <p className="font-semibold text-slate-950">{item.office}</p>
-                  <p className="text-sm font-bold text-blue-700">{item.total} steps</p>
+            {officeAnalytics.length ? (
+              officeAnalytics.slice(0, 6).map((item) => (
+                <div
+                  className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3"
+                  key={item.office}
+                >
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="font-semibold text-slate-950">{item.office}</p>
+                    <p className="text-sm font-bold text-blue-700">{item.total} steps</p>
+                  </div>
+                  <p className="mt-2 text-sm text-slate-600">
+                    {item.approved} approved, {item.pending} pending, {item.rejected}{' '}
+                    rejected/returned
+                  </p>
                 </div>
-                <p className="mt-2 text-sm text-slate-600">
-                  {item.approved} approved, {item.pending} pending, {item.rejected}{' '}
-                  rejected/returned
-                </p>
-              </div>
-            ))}
+              ))
+            ) : (
+              <EmptyReportState message="No office steps match the active filters." compact />
+            )}
           </CardContent>
         </Card>
       </div>
@@ -299,15 +308,10 @@ export function ReportsAnalyticsPage() {
   )
 
   function applyPreset(daysBack, preset) {
-    const end = new Date('2026-04-23T00:00:00')
-    const start = new Date(end)
-
-    start.setDate(end.getDate() - daysBack)
     setActivePreset(preset)
     setDraftFilters((current) => ({
       ...current,
-      endDate: toDateInputValue(end),
-      startDate: toDateInputValue(start),
+      ...getReportPresetRange(daysBack),
     }))
   }
 
@@ -321,6 +325,18 @@ export function ReportsAnalyticsPage() {
     setActivePreset('')
     setDraftFilters((current) => ({ ...current, [key]: value }))
   }
+}
+
+function EmptyReportState({ compact = false, message }) {
+  return (
+    <div
+      className={`flex h-full items-center justify-center rounded-xl border border-dashed border-slate-300 bg-slate-50 px-4 text-center ${
+        compact ? 'py-8' : 'py-12'
+      }`}
+    >
+      <p className="text-sm font-semibold text-slate-600">{message}</p>
+    </div>
+  )
 }
 
 function Field({ children, className = '', label }) {

@@ -9,6 +9,7 @@ const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? ''
 const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
 
 type Payload = {
+  userId?: string
   fullName?: string
   email?: string
   password?: string
@@ -53,10 +54,54 @@ Deno.serve(async (request) => {
     }
 
     if (callerProfile?.roles?.name !== 'admin') {
-      return jsonResponse({ error: 'Only system administrators can create users.' }, 403)
+      return jsonResponse({ error: 'Only system administrators can manage users.' }, 403)
     }
 
-    const payload = (await request.json()) as Payload
+    const payload = (await request.json().catch(() => ({}))) as Payload
+
+    if (request.method === 'DELETE') {
+      const userId = payload.userId?.trim()
+
+      if (!userId) {
+        return jsonResponse({ error: 'User id is required.' }, 400)
+      }
+
+      if (userId === caller.id) {
+        return jsonResponse({ error: 'You cannot delete your current signed-in account.' }, 400)
+      }
+
+      const { error: reviewedByError } = await adminClient
+        .from('clearance_request_steps')
+        .update({ reviewed_by: null })
+        .eq('reviewed_by', userId)
+
+      const { error: remarksError } = await adminClient
+        .from('request_remarks')
+        .update({ created_by: null })
+        .eq('created_by', userId)
+
+      const { error: auditError } = await adminClient
+        .from('audit_logs')
+        .update({ user_id: null })
+        .eq('user_id', userId)
+
+      if (reviewedByError || remarksError || auditError) {
+        console.warn('User delete cleanup warning:', {
+          reviewedByError: reviewedByError?.message,
+          remarksError: remarksError?.message,
+          auditError: auditError?.message,
+        })
+      }
+
+      const { error: deleteError } = await adminClient.auth.admin.deleteUser(userId)
+
+      if (deleteError) {
+        return jsonResponse({ error: deleteError.message }, 400)
+      }
+
+      return jsonResponse({ deleted: true })
+    }
+
     const fullName = payload.fullName?.trim()
     const email = payload.email?.trim().toLowerCase()
     const password = payload.password

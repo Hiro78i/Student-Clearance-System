@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react'
 import { REQUEST_STATUS, ROLES, STEP_STATUS } from '@/constants/roles'
 import { ClearanceContext } from '@/context/clearance-context'
 import { isSupabaseConfigured, supabase } from '@/integrations/supabase/client'
-import { requestTrend } from '@/constants/clearance'
 import { rolesData as roles } from '@/constants/roles'
 import { useAuth } from '@/hooks/useAuth'
 import { nowIso } from '@/lib/utils'
@@ -1700,6 +1699,92 @@ export function ClearanceProvider({ children }) {
     })
   }
 
+  function removeManagedUserFromState(userId) {
+    const deletedRequestIds = new Set(
+      requests.filter((request) => request.student_id === userId).map((request) => request.id),
+    )
+
+    setProfiles((current) => current.filter((profile) => profile.id !== userId))
+    setRequests((current) => current.filter((request) => request.student_id !== userId))
+    setSteps((current) => current.filter((step) => !deletedRequestIds.has(step.request_id)))
+    setRemarks((current) => current.filter((remark) => !deletedRequestIds.has(remark.request_id)))
+    setNotifications((current) =>
+      current.filter((notification) => notification.user_id !== userId),
+    )
+  }
+
+  async function deleteManagedUser(userId, options = {}) {
+    const targetProfile = profiles.find((profile) => profile.id === userId)
+    if (!targetProfile) {
+      throw new Error('User profile not found.')
+    }
+
+    const deleteFromSupabase = async () => {
+      const response = await adminUserServiceExtended.deleteUser(userId)
+
+      if (response?.error) {
+        throw response.error
+      }
+
+      if (response?.data?.profileOnly && isSupabaseConfigured) {
+        const { error } = await directoryService.deleteProfile(userId)
+        if (error) {
+          throw new Error(
+            `${error.message} If this persists, deploy the updated admin-create-user edge function or add an admin delete policy for profiles.`,
+          )
+        }
+      }
+
+      return response?.data || { deleted: true }
+    }
+
+    if (options.optimistic) {
+      removeManagedUserFromState(userId)
+
+      const fastDeleteProfile = async () => {
+        if (isSupabaseConfigured) {
+          const { error } = await directoryService.deleteProfile(userId)
+          if (error) {
+            throw new Error(
+              `${error.message} Run the admin profiles delete policy SQL, then try again.`,
+            )
+          }
+        }
+
+        return deleteFromSupabase()
+      }
+
+      fastDeleteProfile()
+        .then((result) => {
+          options.onBackgroundSuccess?.(result)
+        })
+        .catch((error) => {
+          options.onBackgroundError?.(error)
+        })
+
+      addAuditLog({
+        userId: 'profile-admin',
+        action: 'Queued user account deletion',
+        module: 'User Management',
+        details: `${targetProfile.full_name || targetProfile.email} was removed from the table while backend deletion continues.`,
+      })
+
+      return { queued: true }
+    }
+
+    const result = await deleteFromSupabase()
+    removeManagedUserFromState(userId)
+
+    addAuditLog({
+      userId: 'profile-admin',
+      action: 'Deleted user account',
+      module: 'User Management',
+      details: `${targetProfile.full_name || targetProfile.email} was deleted.`,
+    })
+
+    return result
+  }
+
   const value = {
     courses,
     coursesLoading,
@@ -1713,7 +1798,6 @@ export function ClearanceProvider({ children }) {
     remarks,
     notifications,
     auditLogs,
-    requestTrend,
     getProfile,
     getOffice,
     syncDebug,
@@ -1726,6 +1810,7 @@ export function ClearanceProvider({ children }) {
     createManagedUser,
     updateManagedUser,
     changeManagedUserPassword,
+    deleteManagedUser,
     updateProfileRole,
     updateOfficeDetails,
     addOffice,

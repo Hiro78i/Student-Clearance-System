@@ -405,4 +405,23 @@ export const directoryService = {
       data: mapProfile(raw),
     }
   },
+
+  async deleteProfile(profileId) {
+    if (!supabase) return { error: null, demo: true }
+    const { accessToken, error: sessionError } = await getAccessToken()
+    if (sessionError || !accessToken) {
+      return { data: null, error: sessionError || { message: 'No access token available.' } }
+    }
+
+    const rpcResponse = await fetchRest('rpc/admin_delete_profile', accessToken, {
+      method: 'POST',
+      body: { target_profile_id: profileId },
+    })
+
+    if (!rpcResponse.error) return rpcResponse
+
+    return fetchRest(`profiles?id=eq.${encodeURIComponent(profileId)}`, accessToken, {
+      method: 'DELETE',
+    })
+  },
 }

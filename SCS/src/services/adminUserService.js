@@ -8,6 +8,7 @@ import {
 // If Supabase free-tier is sleeping it can take a long time to cold-start, so we
 // bail out early and fall back to local-only creation instead of spinning forever.
 const CREATE_USER_TIMEOUT_MS = 12000
+const DELETE_USER_TIMEOUT_MS = 30000
 
 /**
  * Race a promise against a timeout. Resolves with { timedOut: true } when the
@@ -157,7 +158,7 @@ async function _callUpdateUser(userId, payload) {
   }
 
   const controller = new AbortController()
-  const tid = window.setTimeout(() => controller.abort(), 10000)
+  const tid = window.setTimeout(() => controller.abort(), DELETE_USER_TIMEOUT_MS)
   try {
     const res = await fetch(`${supabaseUrl}/functions/v1/admin-create-user`, {
       method: 'PATCH',
@@ -215,6 +216,59 @@ async function _callChangePassword(userId, newPassword) {
   }
 }
 
+/** Delete a user's Supabase auth account and profile. */
+async function _callDeleteUser(userId) {
+  let session
+  try {
+    const { data: { session: s }, error } = await supabase.auth.getSession()
+    if (error || !s?.access_token) {
+      return { data: null, error: { message: 'No active admin session.' } }
+    }
+    session = s
+  } catch {
+    return { data: null, error: { message: 'Unable to verify admin session.' } }
+  }
+
+  const controller = new AbortController()
+  const tid = window.setTimeout(() => controller.abort(), 10000)
+  try {
+    const res = await fetch(`${supabaseUrl}/functions/v1/admin-create-user`, {
+      method: 'DELETE',
+      headers: {
+        apikey: supabaseAnonKey,
+        Authorization: `Bearer ${session.access_token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ userId }),
+      signal: controller.signal,
+    })
+    const body = await res.json().catch(() => null)
+    if (res.ok) return { data: body, error: null }
+    if (res.status === 404) {
+      return {
+        data: null,
+        error: {
+          message:
+            'Admin delete function is not deployed in Supabase. Deploy the admin-create-user function first.',
+        },
+      }
+    }
+    return { data: null, error: { message: body?.error || 'Failed to delete user.' } }
+  } catch (error) {
+    return {
+      data: null,
+      error: {
+        message:
+          error?.name === 'AbortError'
+            ? 'Deleting user is taking too long. Please try again, or redeploy the admin edge function if this keeps happening.'
+            : 'Unable to delete user account.',
+      },
+    }
+  } finally {
+    window.clearTimeout(tid)
+  }
+}
+
 export const adminUserServiceExtended = {
   async updateUser(userId, payload) {
     if (!supabase) return { data: null, error: null, demo: true, payload }
@@ -229,5 +283,16 @@ export const adminUserServiceExtended = {
     if (timedOut) return { data: null, error: null, demo: true }
     return value
   },
-}
 
+  async deleteUser(userId) {
+    if (!supabase) return { data: null, error: null, demo: true }
+    const { timedOut, value } = await withTimeout(_callDeleteUser(userId), DELETE_USER_TIMEOUT_MS + 2000)
+    if (timedOut) {
+      return {
+        data: { profileOnly: true, reason: 'edge-timeout' },
+        error: null,
+      }
+    }
+    return value
+  },
+}

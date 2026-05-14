@@ -143,9 +143,11 @@ export function AdminClearancesPage() {
   }
 
   async function handleDeleteRequest(row) {
+    const studentName = row.student?.full_name || 'This student'
+    const clearanceLabel = row.clearance_type || 'clearance request'
     const response = await confirmAction({
       title: 'Delete clearance request?',
-      text: `${row.id} and all related workflow steps will be permanently removed from the current admin clearance list.`,
+      text: `${studentName}'s ${clearanceLabel} and all related workflow steps will be permanently removed from the current admin clearance list.`,
       confirmButtonText: 'Delete Request',
       icon: 'warning',
     })
